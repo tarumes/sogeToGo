@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -14,6 +15,10 @@ import (
 )
 
 func main() {
+	fmt.Println("[i] This tool is currently experimental\n keep in mind to make propper backups of your sogebot.db and/or .env file")
+	fmt.Println(" Press ENTER to continue ...")
+	awaitUserIput()
+
 	//check if NodeJS is installed
 	fmt.Println("Check if NodeJS is installed")
 	path, err := exec.LookPath("node")
@@ -54,6 +59,11 @@ func main() {
 	} else {
 		fmt.Println("[i] new bot version found\n\nStarting Update")
 		// Check for temp folder
+		fmt.Println("[i] This tool is currently experimental\n keep in mind to make propper backups of your sogebot.db and/or .env file")
+		fmt.Println(" Press CTRL + C to abort")
+		fmt.Println(" Press ENTER to continue ...")
+		awaitUserIput()
+
 		err = os.Mkdir("./temp", 0777)
 		if err != nil {
 			fmt.Println("✕ No Permission to write in this directory")
@@ -125,6 +135,8 @@ func main() {
 		}
 		fmt.Println("✓ Your bot is installed and up to date\ngo into the new bot folder and run `npm start`\nenjoy sogeBot")
 	}
+	fmt.Println(" Press ENTER to continue ...")
+	awaitUserIput()
 
 }
 
@@ -189,4 +201,14 @@ func copyFile(src string, dst string) error {
 		return err
 	}
 	return out.Close()
+}
+
+func awaitUserIput() {
+	buf := bufio.NewReader(os.Stdin)
+	sentence, err := buf.ReadBytes('\n')
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		fmt.Println(string(sentence))
+	}
 }
