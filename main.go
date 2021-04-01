@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -8,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
+	"time"
 
 	"github.com/artdarek/go-unzip/pkg/unzip"
 	"github.com/tidwall/gjson"
@@ -37,6 +41,7 @@ func main() {
 	}
 
 	fmt.Println("[i] check online for new version")
+	getRateLimit()
 	// check online for latest version
 	jsonData, err := getContent("https://api.github.com/repos/sogehige/sogeBot/releases/latest")
 	if err != nil {
@@ -77,14 +82,56 @@ func main() {
 		}
 
 		fmt.Println("[i] starting install\n this may take a while get some coffee while im installing")
+
+		// run NPM install
 		os.Chdir("./bot")
 		cmd := exec.Command("npm", "ci")
-		err = cmd.Run()
-		if err != nil {
-			fmt.Println(" ✕ Install Failed")
-			log.Fatal(err)
-		}
+
+		r, _ := cmd.StdoutPipe()
+		cmd.Stderr = cmd.Stdout
+		progress := make(chan struct{})
+		scanner := bufio.NewScanner(r)
+		go func() {
+
+			// Read line by line and process it
+			for scanner.Scan() {
+				line := bytes.NewBufferString(scanner.Text())
+				fmt.Println(line.String())
+			}
+
+			// We're all done, unblock the channel
+			progress <- struct{}{}
+
+		}()
+		cmd.Start()
+		<-progress
+		err = cmd.Wait()
+		fmt.Println(err)
+
 		fmt.Println(" ✓ Your bot is installed and up to date\ngo into the new bot folder and run `npm start`\nenjoy sogeBot")
+
+		cmd = exec.Command("npm", "start")
+
+		r, _ = cmd.StdoutPipe()
+		cmd.Stderr = cmd.Stdout
+		progress = make(chan struct{})
+		scanner = bufio.NewScanner(r)
+		go func() {
+
+			// Read line by line and process it
+			for scanner.Scan() {
+				line := bytes.NewBufferString(scanner.Text())
+				fmt.Println(line.String())
+			}
+
+			// We're all done, unblock the channel
+			progress <- struct{}{}
+
+		}()
+		cmd.Start()
+		<-progress
+		err = cmd.Wait()
+		fmt.Println(err)
 
 	} else {
 		// update or start current Bot
@@ -98,6 +145,29 @@ func main() {
 			//compare new and old version
 			if currentVersion == latestVersion.String() {
 				fmt.Println(" ✓ Your bot is up to date")
+
+				os.Chdir("./bot")
+				cmd := exec.Command("npm", "start")
+				r, _ := cmd.StdoutPipe()
+				cmd.Stderr = cmd.Stdout
+				progress := make(chan struct{})
+				scanner := bufio.NewScanner(r)
+				go func() {
+
+					// Read line by line and process it
+					for scanner.Scan() {
+						line := bytes.NewBufferString(scanner.Text())
+						fmt.Println(line.String())
+					}
+
+					// We're all done, unblock the channel
+					progress <- struct{}{}
+
+				}()
+				cmd.Start()
+				<-progress
+				err = cmd.Wait()
+				fmt.Println(err)
 
 			} else {
 				fmt.Println("[*] new bot version found\n\nStarting Update")
@@ -180,12 +250,52 @@ func main() {
 				// run NPM install
 				os.Chdir("./bot")
 				cmd := exec.Command("npm", "ci")
-				err = cmd.Run()
-				if err != nil {
-					fmt.Println(" ✕ Install Failed")
-					log.Fatal(err)
-				}
+
+				r, _ := cmd.StdoutPipe()
+				cmd.Stderr = cmd.Stdout
+				progress := make(chan struct{})
+				scanner := bufio.NewScanner(r)
+				go func() {
+
+					// Read line by line and process it
+					for scanner.Scan() {
+						line := bytes.NewBufferString(scanner.Text())
+						fmt.Println(line.String())
+					}
+
+					// We're all done, unblock the channel
+					progress <- struct{}{}
+
+				}()
+				cmd.Start()
+				<-progress
+				err = cmd.Wait()
+				fmt.Println(err)
+
 				fmt.Println(" ✓ Your bot is installed and up to date\ngo into the new bot folder and run `npm start`\nenjoy sogeBot")
+
+				cmd = exec.Command("npm", "start")
+
+				r, _ = cmd.StdoutPipe()
+				cmd.Stderr = cmd.Stdout
+				progress = make(chan struct{})
+				scanner = bufio.NewScanner(r)
+				go func() {
+
+					// Read line by line and process it
+					for scanner.Scan() {
+						line := bytes.NewBufferString(scanner.Text())
+						fmt.Println(line.String())
+					}
+
+					// We're all done, unblock the channel
+					progress <- struct{}{}
+
+				}()
+				cmd.Start()
+				<-progress
+				err = cmd.Wait()
+				fmt.Println(err)
 
 			}
 
@@ -278,7 +388,7 @@ func checkNodeJS() {
 		fmt.Println("Please checkout official sogeBot Documentation for help")
 		os.Exit(1)
 	}
-	fmt.Println(" ✓ Found NodeJS in\n", path)
+	fmt.Println(" ✓ Found NodeJS in:", path)
 }
 
 // checkPreviousInstall checks for previous version installed an returns a version string
@@ -325,5 +435,31 @@ func installBot(latestZip string, zipName string) {
 	//fmt.Printf("files list: %v\n", files)
 	fmt.Printf(" Extracted files count: %d\n", len(files))
 
-	fmt.Println("✓ Extract Done")
+	fmt.Println(" ✓ Extract Done")
+}
+
+func getRateLimit() {
+	jsonData, err := getContent("https://api.github.com/rate_limit")
+	if err != nil {
+		fmt.Println(" ✕ Can´t check Github Ratelimit")
+		os.Exit(1)
+	}
+	coreLimit := gjson.Get(jsonData, "resources.core.remaining")
+	//coreLimitInt, _ := strconv.ParseInt(coreLimit.String(), 10, 64)
+	coreReset := gjson.Get(jsonData, "resources.core.reset")
+
+	i, err := strconv.ParseInt(coreReset.String(), 10, 64)
+	if err != nil {
+		panic(err)
+	}
+	tm := time.Unix(i, 0)
+
+	fmt.Println("[i] Github Ratelimit: "+coreLimit.String()+" requests left until", tm)
+	if coreLimit.Int() < 10 {
+		sleep := (time.Duration(coreReset.Int()) - time.Duration(time.Now().Unix())) * time.Second
+		fmt.Println(" ✕ Github Ratelimit reached sleeping for", sleep)
+		time.Sleep(sleep)
+		fmt.Println(" ✓ Sleep Over.....")
+	}
+
 }
