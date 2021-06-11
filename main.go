@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -18,7 +17,6 @@ import (
 )
 
 func main() {
-
 	fmt.Println("[i] This tool is currently experimental\n keep in mind to make propper backups of your sogebot.db and/or .env file")
 
 	//check for NodeJS
@@ -146,28 +144,10 @@ func main() {
 			if currentVersion == latestVersion.String() {
 				fmt.Println(" ✓ Your bot is up to date")
 
-				os.Chdir("./bot")
-				cmd := exec.Command("npm", "start")
-				r, _ := cmd.StdoutPipe()
-				cmd.Stderr = cmd.Stdout
-				progress := make(chan struct{})
-				scanner := bufio.NewScanner(r)
-				go func() {
-
-					// Read line by line and process it
-					for scanner.Scan() {
-						line := bytes.NewBufferString(scanner.Text())
-						fmt.Println(line.String())
-					}
-
-					// We're all done, unblock the channel
-					progress <- struct{}{}
-
-				}()
-				cmd.Start()
-				<-progress
-				err = cmd.Wait()
-				fmt.Println(err)
+				_, err := run("./bot", "npm", []string{"start"}, true)
+				if err != nil {
+					log.Println(err)
+				}
 
 			} else {
 				fmt.Println("[*] new bot version found\n\nStarting Update")
@@ -248,83 +228,22 @@ func main() {
 				fmt.Println("[i] starting install\n this may take a while get some coffee while im installing")
 
 				// run NPM install
-				os.Chdir("./bot")
-				cmd := exec.Command("npm", "ci")
-
-				r, _ := cmd.StdoutPipe()
-				cmd.Stderr = cmd.Stdout
-				progress := make(chan struct{})
-				scanner := bufio.NewScanner(r)
-				go func() {
-
-					// Read line by line and process it
-					for scanner.Scan() {
-						line := bytes.NewBufferString(scanner.Text())
-						fmt.Println(line.String())
-					}
-
-					// We're all done, unblock the channel
-					progress <- struct{}{}
-
-				}()
-				cmd.Start()
-				<-progress
-				err = cmd.Wait()
-				fmt.Println(err)
+				_, err := run("./bot", "npm", []string{"ci"}, true)
+				if err != nil {
+					log.Println(err)
+				}
 
 				fmt.Println(" ✓ Your bot is installed and up to date\ngo into the new bot folder and run `npm start`\nenjoy sogeBot")
 
-				cmd = exec.Command("npm", "start")
-
-				r, _ = cmd.StdoutPipe()
-				cmd.Stderr = cmd.Stdout
-				progress = make(chan struct{})
-				scanner = bufio.NewScanner(r)
-				go func() {
-
-					// Read line by line and process it
-					for scanner.Scan() {
-						line := bytes.NewBufferString(scanner.Text())
-						fmt.Println(line.String())
-					}
-
-					// We're all done, unblock the channel
-					progress <- struct{}{}
-
-				}()
-				cmd.Start()
-				<-progress
-				err = cmd.Wait()
-				fmt.Println(err)
-
+				_, err = run("./bot", "npm", []string{"start"}, true)
+				if err != nil {
+					log.Println(err)
+				}
 			}
 
 		}
 	}
 	os.Exit(0)
-}
-
-// DownloadFile will download a url to a local file. It's efficient because it will
-// write as it downloads and not load the whole file into memory.
-func DownloadFile(filepath string, url string) error {
-
-	// Get the data
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	// Create the file
-	out, err := os.Create(filepath)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	// Write the body to file
-	_, err = io.Copy(out, resp.Body)
-	return err
 }
 
 func getContent(url string) (string, error) {
@@ -345,26 +264,6 @@ func getContent(url string) (string, error) {
 	// show the HTML code as a string %s
 	//fmt.Printf("%s\n", html)
 	return string(html), err
-}
-
-func copyFile(src string, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, in)
-	if err != nil {
-		return err
-	}
-	return out.Close()
 }
 
 /*
@@ -400,18 +299,6 @@ func checkPreviousInstall() (string, error) {
 		currentVersion := gjson.Get(string(packageJson), "version")
 		return currentVersion.String(), nil
 	}
-}
-
-// exists returns whether the given file or directory exists
-func exists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	return false, err
 }
 
 func installBot(latestZip string, zipName string) {
