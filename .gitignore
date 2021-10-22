@@ -1,1 +1,4 @@
 bot/
+temp/
+backup/
+__debug_bin.exe
