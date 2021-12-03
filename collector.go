@@ -147,7 +147,7 @@ func Collector() CollectorData {
 		defer await.Done()
 		err := func() error {
 			// check online for latest version
-			jsonData, err := getContent("https://api.github.com/repos/sogehige/sogeBot/releases/latest")
+			jsonData, err := getContent("https://api.github.com/repos/sogebot/sogeBot/releases/latest")
 			if err != nil {
 				return err
 			}
