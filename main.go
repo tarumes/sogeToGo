@@ -1,130 +1,118 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"sogeToGo/helpers"
+	"sogeToGo/types"
+	"strings"
 	"time"
-
-	"github.com/hashicorp/go-version"
 )
 
 func main() {
-	fmt.Println("[i] This tool is currently experimental\n keep in mind to make propper backups of your sogebot.db and/or .env file")
-	var doInstall bool = false
+	//var doInstall bool = false
+	//var doStart bool = false
 
-	getRateLimit()
-	info := Collector()
+	var timestamp string = fmt.Sprint(time.Now().Unix())
+	err := os.MkdirAll(fmt.Sprintf("backup/%s/", timestamp), 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
+	helpers.CopyFile("bot/sogebot.db", fmt.Sprintf("backup/%s/sogebot.db", timestamp))
+	helpers.CopyFile("bot/sogebot.db-wal", fmt.Sprintf("backup/%s/sogebot.db-wal", timestamp))
+	helpers.CopyFile("bot/sogebot.db-shm", fmt.Sprintf("backup/%s/sogebot.db-shm", timestamp))
+	helpers.CopyFile("bot/.env", fmt.Sprintf("backup/%s/.env", timestamp))
 
-	if info.Install.BotExist {
-		vBot, err := version.NewSemver(info.Versions.Bot)
+	release, err := func() (types.GithubApiRelease, error) {
+		data, err := helpers.GetURLContent("https://api.github.com/repos/sogebot/sogeBot/releases/latest")
 		if err != nil {
-			log.Fatal(err)
+			return types.GithubApiRelease{}, err
 		}
-		vRelease, err := version.NewSemver(info.Versions.Release)
+		var reply types.GithubApiRelease
+		err = json.Unmarshal(data, &reply)
 		if err != nil {
-			log.Fatal(err)
+			fmt.Println(err)
+			return types.GithubApiRelease{}, err
 		}
-		if vRelease.GreaterThan(vBot) {
-			doInstall = true
-		}
-	} else {
-		// bot dont exist
-		doInstall = true
+		return reply, err
+	}()
+	if err != nil {
+		fmt.Println(err)
 	}
 
-	fmt.Println("BotExist", info.Install.BotExist)
-	fmt.Println("doInstall", doInstall)
-	fmt.Printf("Bot: '%s'\nRelease: '%s'\n", info.Versions.Bot, info.Versions.Release)
-
-	if doInstall {
-		err := os.MkdirAll("./bot", 0777)
+	installed, err := func() (types.SogeBotPackage, error) {
+		data, err := os.ReadFile("bot/package.json")
 		if err != nil {
-			log.Fatal(err)
+			return types.SogeBotPackage{}, err
 		}
-		err = os.MkdirAll("./backup", 0777)
+		var reply types.SogeBotPackage
+		err = json.Unmarshal(data, &reply)
 		if err != nil {
-			log.Fatal(err)
+			fmt.Println(err)
+			return types.SogeBotPackage{}, err
 		}
-		if info.Install.BotExist {
-			_ = os.Mkdir("./temp", 0777)
-			envFile, _ := exists("./bot/.env")
-			dbFile, _ := exists("./bot/sogebot.db")
-			if envFile {
-				fmt.Println("[i] move previous config to temp dir")
-				err = copyFile("./bot/.env", "./temp/.env")
-				if err != nil {
-					log.Fatal(".env copy failed", err)
-				} else {
-					log.Println("\".env\" copy done")
-				}
-			}
-			if dbFile {
-				fmt.Println("[i] move previous database to temp dir")
-				err = copyFile("./bot/sogebot.db", fmt.Sprintf("./backup/sogebot_%d.db", time.Now().Unix()))
-				if err != nil {
-					log.Fatal("backup failed", err)
-				}
-				err = copyFile("./bot/sogebot.db", "./temp/sogebot.db")
-				if err != nil {
-					log.Fatal(err)
-				} else {
-					log.Println("\"sogebot.db\" copy done")
-				}
-			}
-			err = os.RemoveAll("./bot/")
-			if err != nil {
-				log.Fatal(err)
-			} else {
-				log.Println("cleanup done")
-			}
-			err = os.Mkdir("./bot", 0777)
-			log.Println(err)
-		}
-
-		err = deployBot(info.Git.DownloadURL, info.Git.ZipName)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		if info.Install.BotExist {
-			envFile, _ := exists("./temp/.env")
-			dbFile, _ := exists("./temp/sogebot.db")
-			if envFile {
-				log.Println("[i] move previous config to bot dir")
-				err = copyFile("./temp/.env", "./bot/.env")
-				if err != nil {
-					log.Fatal("no .env found from previous install")
-				} else {
-					log.Println("copy done")
-				}
-			}
-			if dbFile {
-				log.Println("[i] move previous database to bot dir")
-				err = copyFile("./temp/sogebot.db", "./bot/sogebot.db")
-				if err != nil {
-					log.Fatal("no sogebot.db found from previous install")
-				} else {
-					log.Println("copy done")
-				}
-			}
-
-			log.Println("[i] cleanup artifacts")
-			err = os.RemoveAll("./temp")
-			if err != nil {
-				log.Fatal("delete temp folder failed ", err)
-			} else {
-				log.Println("cleanup done")
-			}
-		}
-
-		log.Println("start install => this may take a while")
-		_, err = exe("./bot", "npm", []string{"install"}, true)
-		if err != nil {
-			log.Fatal(err)
-		}
+		return reply, err
+	}()
+	if err != nil {
+		fmt.Println(err)
 	}
 
-	exe("./bot", "npm", []string{"start"}, true)
+	func() {
+		if release.TagName != installed.Version || installed.Version == "" {
+			if strings.HasSuffix(release.Assets[0].BrowserDownloadUrl, ".zip") {
+				fmt.Println("New Version Found")
 
+				fmt.Println("create temp folder")
+				os.Mkdir("temp", 0644)
+				defer os.RemoveAll("temp")
+
+				fmt.Println("download zip version")
+				err := helpers.DownloadToFile(release.Assets[0].BrowserDownloadUrl, "temp/sogebot.zip")
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
+				fmt.Println("unzip")
+				_, err = helpers.Unzip("temp/sogebot.zip", "temp/bot")
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
+				fmt.Println("try copy previous files")
+				helpers.CopyFile("bot/sogebot.db", "temp/sogebot.db")
+				helpers.CopyFile("bot/sogebot.db-wal", "temp/sogebot.db-wal")
+				helpers.CopyFile("bot/sogebot.db-shm", "temp/sogebot.db-shm")
+				helpers.CopyFile("bot/.env", "temp/.env")
+
+				fmt.Println("clean old bot folder")
+				err = os.RemoveAll("bot")
+				if err != nil {
+					fmt.Println(err)
+					os.Exit(1)
+				}
+
+				fmt.Println("create new bot folder")
+				err = os.Rename("temp/bot", "bot")
+				if err != nil {
+					fmt.Println(err)
+					os.Exit(1)
+				}
+
+				fmt.Println("try moving back old settings")
+				helpers.CopyFile("temp/sogebot.db", "bot/sogebot.db")
+				helpers.CopyFile("temp/sogebot.db-wal", "bot/sogebot.db-wal")
+				helpers.CopyFile("temp/sogebot.db-shm", "bot/sogebot.db-shm")
+				helpers.CopyFile("temp/.env", "bot/.env")
+
+				fmt.Println("install new bot")
+				helpers.Exe("bot", "npm", []string{"install"}, true)
+			}
+		}
+	}()
+
+	func() {
+		helpers.Exe("bot", "npm", []string{"start"}, true)
+	}()
 }
