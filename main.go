@@ -65,7 +65,7 @@ func main() {
 				fmt.Println("New Version Found")
 
 				fmt.Println("create temp folder")
-				os.Mkdir("temp", 0644)
+				os.MkdirAll("temp", 0755)
 				defer os.RemoveAll("temp")
 
 				fmt.Println("download zip version")
